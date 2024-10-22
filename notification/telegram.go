@@ -267,11 +267,10 @@ func (t telegram) BuyHandle(c tb.Context) error {
 }
 
 func (t telegram) SellHandle(c tb.Context) error {
-	log.Info(c.Message().Text)
 	match := sellRegexp.FindStringSubmatch(c.Message().Text)
 
 	if len(match) == 0 {
-		_, err := t.client.Send(c.Sender(), "Invalid command.\nExample of usage:\n`/sell BTCUSDT 100`\n\n`/sell BTCUSDT 50%")
+		_, err := t.client.Send(c.Sender(), "Invalid command.\nExample of usage:\n`/sell BTCUSDT 100`\n\n`/sell BTCUSDT 50%`")
 		if err != nil {
 			log.Error(err)
 		}
