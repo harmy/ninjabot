@@ -1,6 +1,8 @@
 module github.com/rodrigo-brito/ninjabot
 
-go 1.18
+go 1.22
+
+toolchain go1.22.2
 
 require (
 	github.com/StudioSol/set v1.0.0
@@ -21,7 +23,7 @@ require (
 	github.com/xhit/go-str2duration/v2 v2.1.0
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
 	gonum.org/v1/gonum v0.15.0
-	gopkg.in/tucnak/telebot.v2 v2.5.0
+	gopkg.in/telebot.v3 v3.2.1
 	gorm.io/gorm v1.25.12
 )
 
@@ -53,7 +55,6 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect

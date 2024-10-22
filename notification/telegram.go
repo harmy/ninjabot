@@ -9,7 +9,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	tb "gopkg.in/tucnak/telebot.v2"
+	tb "gopkg.in/telebot.v3"
 
 	"github.com/rodrigo-brito/ninjabot/exchange"
 	"github.com/rodrigo-brito/ninjabot/model"
@@ -32,7 +32,7 @@ type telegram struct {
 type Option func(telegram *telegram)
 
 func NewTelegram(controller *order.Controller, settings model.Settings, options ...Option) (service.Telegram, error) {
-	menu := &tb.ReplyMarkup{ResizeReplyKeyboard: true}
+	menu := &tb.ReplyMarkup{ResizeKeyboard: true}
 	poller := &tb.LongPoller{Timeout: 10 * time.Second}
 
 	userMiddleware := tb.NewMiddlewarePoller(poller, func(u *tb.Update) bool {
@@ -131,7 +131,7 @@ func (t telegram) Notify(text string) {
 	}
 }
 
-func (t telegram) BalanceHandle(m *tb.Message) {
+func (t telegram) BalanceHandle(c tb.Context) error {
 	message := "*BALANCE*\n"
 	quotesValue := make(map[string]float64)
 	total := 0.0
@@ -140,7 +140,7 @@ func (t telegram) BalanceHandle(m *tb.Message) {
 	if err != nil {
 		log.Error(err)
 		t.OnError(err)
-		return
+		return err
 	}
 
 	for _, pair := range t.settings.Pairs {
@@ -154,7 +154,7 @@ func (t telegram) BalanceHandle(m *tb.Message) {
 		if err != nil {
 			log.Error(err)
 			t.OnError(err)
-			return
+			return err
 		}
 
 		assetValue := assetSize * quote
@@ -170,18 +170,19 @@ func (t telegram) BalanceHandle(m *tb.Message) {
 
 	message += fmt.Sprintf("-----\nTotal: `%.4f`\n", total)
 
-	_, err = t.client.Send(m.Sender, message)
+	_, err = t.client.Send(c.Sender(), message)
 	if err != nil {
 		log.Error(err)
 	}
+	return err
 }
 
-func (t telegram) HelpHandle(m *tb.Message) {
-	commands, err := t.client.GetCommands()
+func (t telegram) HelpHandle(c tb.Context) error {
+	commands, err := t.client.Commands()
 	if err != nil {
 		log.Error(err)
 		t.OnError(err)
-		return
+		return err
 	}
 
 	lines := make([]string, 0, len(commands))
@@ -189,37 +190,40 @@ func (t telegram) HelpHandle(m *tb.Message) {
 		lines = append(lines, fmt.Sprintf("/%s - %s", command.Text, command.Description))
 	}
 
-	_, err = t.client.Send(m.Sender, strings.Join(lines, "\n"))
+	_, err = t.client.Send(c.Sender(), strings.Join(lines, "\n"))
 	if err != nil {
 		log.Error(err)
+		return err
 	}
+	return nil
 }
 
-func (t telegram) ProfitHandle(m *tb.Message) {
+func (t telegram) ProfitHandle(c tb.Context) error {
 	if len(t.orderController.Results) == 0 {
-		_, err := t.client.Send(m.Sender, "No trades registered.")
+		_, err := t.client.Send(c.Sender(), "No trades registered.")
 		if err != nil {
 			log.Error(err)
 		}
-		return
+		return err
 	}
 
 	for pair, summary := range t.orderController.Results {
-		_, err := t.client.Send(m.Sender, fmt.Sprintf("*PAIR*: `%s`\n`%s`", pair, summary.String()))
+		_, err := t.client.Send(c.Sender(), fmt.Sprintf("*PAIR*: `%s`\n`%s`", pair, summary.String()))
 		if err != nil {
 			log.Error(err)
 		}
 	}
+	return nil
 }
 
-func (t telegram) BuyHandle(m *tb.Message) {
-	match := buyRegexp.FindStringSubmatch(m.Text)
+func (t telegram) BuyHandle(c tb.Context) error {
+	match := buyRegexp.FindStringSubmatch(c.Message().Text)
 	if len(match) == 0 {
-		_, err := t.client.Send(m.Sender, "Invalid command.\nExamples of usage:\n`/buy BTCUSDT 100`\n\n`/buy BTCUSDT 50%`")
+		_, err := t.client.Send(c.Sender(), "Invalid command.\nExamples of usage:\n`/buy BTCUSDT 100`\n\n`/buy BTCUSDT 50%`")
 		if err != nil {
 			log.Error(err)
 		}
-		return
+		return err
 	}
 
 	command := make(map[string]string)
@@ -234,13 +238,13 @@ func (t telegram) BuyHandle(m *tb.Message) {
 	if err != nil {
 		log.Error(err)
 		t.OnError(err)
-		return
+		return err
 	} else if amount <= 0 {
-		_, err := t.client.Send(m.Sender, "Invalid amount")
+		_, err := t.client.Send(c.Sender(), "Invalid amount")
 		if err != nil {
 			log.Error(err)
 		}
-		return
+		return err
 	}
 
 	if command["percent"] != "" {
@@ -248,7 +252,7 @@ func (t telegram) BuyHandle(m *tb.Message) {
 		if err != nil {
 			log.Error(err)
 			t.OnError(err)
-			return
+			return err
 		}
 
 		amount = amount * quote / 100.0
@@ -256,19 +260,22 @@ func (t telegram) BuyHandle(m *tb.Message) {
 
 	order, err := t.orderController.CreateOrderMarketQuote(model.SideTypeBuy, pair, amount)
 	if err != nil {
-		return
+		return err
 	}
 	log.Info("[TELEGRAM]: BUY ORDER CREATED: ", order)
+	return nil
 }
 
-func (t telegram) SellHandle(m *tb.Message) {
-	match := sellRegexp.FindStringSubmatch(m.Text)
+func (t telegram) SellHandle(c tb.Context) error {
+	log.Info(c.Message().Text)
+	match := sellRegexp.FindStringSubmatch(c.Message().Text)
+
 	if len(match) == 0 {
-		_, err := t.client.Send(m.Sender, "Invalid command.\nExample of usage:\n`/sell BTCUSDT 100`\n\n`/sell BTCUSDT 50%")
+		_, err := t.client.Send(c.Sender(), "Invalid command.\nExample of usage:\n`/sell BTCUSDT 100`\n\n`/sell BTCUSDT 50%")
 		if err != nil {
 			log.Error(err)
 		}
-		return
+		return err
 	}
 
 	command := make(map[string]string)
@@ -283,75 +290,79 @@ func (t telegram) SellHandle(m *tb.Message) {
 	if err != nil {
 		log.Error(err)
 		t.OnError(err)
-		return
+		return err
 	} else if amount <= 0 {
-		_, err := t.client.Send(m.Sender, "Invalid amount")
+		_, err := t.client.Send(c.Sender(), "Invalid amount")
 		if err != nil {
 			log.Error(err)
 		}
-		return
+		return err
 	}
 
 	if command["percent"] != "" {
 		asset, _, err := t.orderController.Position(pair)
 		if err != nil {
-			return
+			return err
 		}
 
 		amount = amount * asset / 100.0
 		order, err := t.orderController.CreateOrderMarket(model.SideTypeSell, pair, amount)
 		if err != nil {
-			return
+			return err
 		}
 		log.Info("[TELEGRAM]: SELL ORDER CREATED: ", order)
-		return
+		return nil
 	}
 
 	order, err := t.orderController.CreateOrderMarketQuote(model.SideTypeSell, pair, amount)
 	if err != nil {
-		return
+		return err
 	}
 	log.Info("[TELEGRAM]: SELL ORDER CREATED: ", order)
+	return nil
 }
 
-func (t telegram) StatusHandle(m *tb.Message) {
+func (t telegram) StatusHandle(c tb.Context) error {
 	status := t.orderController.Status()
-	_, err := t.client.Send(m.Sender, fmt.Sprintf("Status: `%s`", status))
+	_, err := t.client.Send(c.Sender(), fmt.Sprintf("Status: `%s`", status))
 	if err != nil {
 		log.Error(err)
 	}
+	return err 
 }
 
-func (t telegram) StartHandle(m *tb.Message) {
+func (t telegram) StartHandle(c tb.Context) error {
 	if t.orderController.Status() == order.StatusRunning {
-		_, err := t.client.Send(m.Sender, "Bot is already running.", t.defaultMenu)
+		_, err := t.client.Send(c.Sender(), "Bot is already running.", t.defaultMenu)
 		if err != nil {
 			log.Error(err)
 		}
-		return
+		return err
 	}
 
 	t.orderController.Start()
-	_, err := t.client.Send(m.Sender, "Bot started.", t.defaultMenu)
+	_, err := t.client.Send(c.Sender(), "Bot started.", t.defaultMenu)
 	if err != nil {
 		log.Error(err)
 	}
+	return err
 }
 
-func (t telegram) StopHandle(m *tb.Message) {
+func (t telegram) StopHandle(c tb.Context) error {
 	if t.orderController.Status() == order.StatusStopped {
-		_, err := t.client.Send(m.Sender, "Bot is already stopped.", t.defaultMenu)
+		_, err := t.client.Send(c.Sender(), "Bot is already stopped.", t.defaultMenu)
 		if err != nil {
 			log.Error(err)
 		}
-		return
+		return err
 	}
 
 	t.orderController.Stop()
-	_, err := t.client.Send(m.Sender, "Bot stopped.", t.defaultMenu)
+	_, err := t.client.Send(c.Sender(), "Bot stopped.", t.defaultMenu)
 	if err != nil {
 		log.Error(err)
 	}
+	return err
 }
 
 func (t telegram) OnOrder(order model.Order) {
